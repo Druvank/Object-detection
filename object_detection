@@ -1,0 +1,54 @@
+import tensorflow as tf
+import cv2
+import numpy as np
+# Load the pre-trained object detection model
+model = tf.saved_model.load('path/to/saved_model')
+
+# Load the label map
+label_map = {1: 'person', 2: 'car', 3: 'dog'}  # Update with your own label map
+
+# Load the image
+image_path = 'path/to/image.jpg'
+image = cv2.imread(image_path)
+image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+# Preprocess the image
+input_tensor = tf.convert_to_tensor(image)
+input_tensor = input_tensor[tf.newaxis, ...]
+
+# Run inference
+detections = model(input_tensor)
+
+# Extract relevant information from the detections
+num_detections = int(detections.pop('num_detections'))
+detections = {key: value[0, :num_detections].numpy() for key, value in detections.items()}
+detections['num_detections'] = num_detections
+
+# Filter out low-confidence detections
+detections['detection_classes'] = detections['detection_classes'].astype(np.int64)
+valid_indices = np.where(detections['detection_scores'] > 0.5)  # Update the confidence threshold as needed
+for key in detections.keys():
+    detections[key] = detections[key][valid_indices]
+
+# Print the detected objects and their bounding boxes
+for i in range(detections['num_detections']):
+    class_id = detections['detection_classes'][i]
+    class_label = label_map[class_id]
+    box = detections['detection_boxes'][i]
+    score = detections['detection_scores'][i]
+    
+    print(f'Object: {class_label}, Score: {score}')
+    print(f'Bounding Box: {box}')
+
+# Display the image with bounding boxes
+image_with_boxes = image.copy()
+for i in range(detections['num_detections']):
+    box = detections['detection_boxes'][i]
+    ymin, xmin, ymax, xmax = box
+    height, width, _ = image.shape
+    x, y, w, h = int(xmin * width), int(ymin * height), int((xmax - xmin) * width), int((ymax - ymin) * height)
+    cv2.rectangle(image_with_boxes, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+cv2.imshow('Object Detection', image_with_boxes)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
